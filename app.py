@@ -14,20 +14,47 @@ load_dotenv()
 
 app = Flask(__name__)
 
-BOT_ID = os.getenv('BOT_ID')
-ACCESS_TOKEN = os.getenv('ACCESS_TOKEN')
-GROUP_ID = os.getenv('GROUP_ID')
+BOT_ID = os.getenv('GROUPME_BOT_ID')
+ACCESS_TOKEN = os.getenv('GROUPME_ACCESS_TOKEN')
+GROUP_ID = os.getenv('GROUPME_GROUP_ID')
 PORT = int(os.getenv('PORT', 3000))
 GROUPME_API = 'https://api.groupme.com/v3'
 BANNED_KEYWORDS = [
-    'spam',
-    'scam',
-    'bitcoin',
-    'crypto',
-    'onlyfans',
+    'give out',
+    'for free',
+    'willing to give',
+    'free because',
+    'free',
+    'give it because',
+    'macbook',
+    'macbook air',
+    'ps5',
+    'playstation',
+    'gaming system',
+    'model 2025',
+    'lost my son',
+    'cancer',
+    'son',
+    'daughter',
+    'hurts my soul',
+    'no mother should',
+    'god knows best',
+    'text me',
+    'send me a message',
+    'email',
+    'gmail',
+    'hotmail',
+    'yahoo',
+    'perfect health and good condition',
+    'condition',
+    'health'
+    'charger included',
+    'afford one',
+    'interested',
 ]
+
 recently_joined = {}
-NEW_USER_WINDOW_HOURS = 72
+NEW_USER_WINDOW_HOURS = 72 
 
 def validate_config():
     if not all([BOT_ID, ACCESS_TOKEN, GROUP_ID]):
@@ -51,7 +78,7 @@ def send_bot_message(text):
             logger.info(f"Message sent: {text}")
             return True
         else:
-            logger.error(f"Failed to send message. Status: {response.status_code}")
+            logger.error(f"Failed to send message. Status: {response.json()}")
             return False
             
     except requests.RequestException as e:
@@ -66,10 +93,11 @@ def get_membership_id(user_id):
         )
         
         if response.status_code != 200:
-            logger.error(f"Failed to get group info. Status: {response.status_code}")
+            logger.error(f"Failed to get group info. Status: {response.json()}")
             return None
         
         group_data = response.json()['response']
+        print(group_data)
         
         for member in group_data['members']:
             if member['user_id'] == user_id:
@@ -81,6 +109,24 @@ def get_membership_id(user_id):
     except requests.RequestException as e:
         logger.error(f"Error getting membership ID: {e}")
         return None
+    
+def delete_message(message_id):
+    try:
+        response = requests.delete(
+            f"{GROUPME_API}/conversations/{GROUP_ID}/messages/{message_id}",
+            params={'token': ACCESS_TOKEN}
+        )
+        
+        if response.status_code == 204:
+            logger.info(f"Successfully deleted message {message_id}")
+            return True
+        else:
+            logger.error(f"Failed to delete message. Info: {response.json()}")
+            return False
+            
+    except requests.RequestException as e:
+        logger.error(f"Error deleting message: {e}")
+        return False
 
 def kick_user(user_id, username):
     try:
@@ -98,7 +144,7 @@ def kick_user(user_id, username):
             logger.info(f"Successfully kicked user {username} (ID: {user_id})")
             return True
         else:
-            logger.error(f"Failed to kick user {username}. Status: {response.status_code}")
+            logger.error(f"Failed to kick user {username}. Info: {response.json()}")
             return False
             
     except requests.RequestException as e:
@@ -111,7 +157,10 @@ def is_new_user(user_id):
     
     join_time = recently_joined[user_id]
     time_since_join = datetime.now() - join_time
-    return time_since_join < timedelta(hours=NEW_USER_WINDOW_HOURS)
+    if time_since_join > timedelta(hours=NEW_USER_WINDOW_HOURS):
+        del recently_joined[user_id]
+        return False
+    return True
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -120,8 +169,17 @@ def webhook():
         text = data.get('text', '')
         user_id = data.get('user_id')
         username = data.get('name', 'Unknown')
+        message_id = data.get('id')
+
+        if data.get('system'):
+            if 'added' in text.lower() or 'joined' in text.lower():
+                recently_joined[user_id] = datetime.now()
+                logger.info(f"User {username} joined the group")
+                return '', 200
               
         if contains_banned_keyword(text) and is_new_user(user_id):
+            if message_id:
+                delete_message(message_id)
             if kick_user(user_id, username):
                 message = f"⚠️ User {username} was removed for violating group rules."
                 send_bot_message(message)
