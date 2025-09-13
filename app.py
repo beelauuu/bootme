@@ -4,6 +4,7 @@ import requests
 from flask import Flask, request
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+# lt --port 3000 --subdomain bootme to port-forward
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,11 +56,6 @@ BANNED_KEYWORDS = [
 
 recently_joined = {}
 NEW_USER_WINDOW_HOURS = 72 
-
-def validate_config():
-    if not all([BOT_ID, ACCESS_TOKEN, GROUP_ID]):
-        logger.error("Missing required environment variables")
-        raise ValueError("Missing BOT_ID, ACCESS_TOKEN, or GROUP_ID")
 
 def contains_banned_keyword(text):
     if not text:
